@@ -4,7 +4,8 @@
 
 - geoserver-config/
 - data/
-- openlayers-native-html/
-- openlayers-streamlit/
-- leaflet-folium-notebook/
-- leaflet-folium-streamlit/
+- src
+  - openlayers-native-html/
+  - openlayers-streamlit/
+  - leaflet-folium-notebook/
+  - leaflet-folium-streamlit/
