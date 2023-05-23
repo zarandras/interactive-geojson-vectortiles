@@ -1,0 +1,717 @@
+import streamlit as st
+
+from streamlit.components.v1 import html
+
+import folium
+from streamlit_folium import st_folium
+
+from folium_vectorgrid import VectorGridProtobuf
+from branca.element import Element
+
+
+st.title("Folium test")
+
+cols = st.columns(3)
+with cols[0]:
+	show_blue = st.checkbox("Show blue marker", value=True)
+with cols[1]:
+	show_green = st.checkbox("Show green marker", value=True)
+with cols[2]:
+	show_red = st.checkbox("Show red marker", value=False)
+ 
+
+html0 = """
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Twitter-trekking Map Inspector</title>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.9.0/build/ol.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/ol-layerswitcher@4.1.1" crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.9.0/css/ol.css">
+  <style>
+  
+    /* Set height of the grid so .sidenav can be 100% (adjust if needed) */
+    .row.content {height: 580px}
+    
+    .dot {
+      height: 25px;
+      width: 25px;
+      background-color: #bbb;
+      border-radius: 50%;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .hikerpicto {
+      height: 75px;
+      width: 75px;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    /* Set gray background color and 100% height */
+    .sidenav {
+/*      background-color: #f1f1f1;*/
+/*      height: 100%;*/
+    }
+        
+    /* Style the header */
+    .header0 {
+      background-color: #ffffff;
+      padding: 15px;
+      text-align: left;
+      font-size: 50px;
+      color: #073c79;
+    }
+    
+    .header0 h1 {
+      font-size: 50px;
+    }
+    
+    .header0 .logo {
+      float: right;
+    }
+
+    /* Set black background color, white text and some padding */
+    .footer0 {
+      background-color: #073c79;
+      color: white;
+      padding: 15px;
+    }
+    
+    footer a {
+        color: white;
+    }
+    
+    footer a:hover {
+        color: #dddddd;
+    }
+
+    /* On small screens, set height to 'auto' for sidenav and grid */
+    @media screen and (max-width: 767px) {
+      .sidenav {
+        height: auto;
+        padding: 15px;
+      }
+      .row.content {height: auto;} 
+    }
+  
+  
+    html, body {
+      font-family: sans-serif;
+    }
+    
+    .map {
+/*      height: 650px;*/
+/*      height: 1000px;*/
+      height: 900px;
+/*      width: 100%;*/
+      position: relative;
+    }
+
+    #info {
+        z-index: 1;
+        opacity: 0.5;
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        margin: 0;
+        padding: 15px;
+        background: rgba(0,60,136,0.7);
+        color: white;
+        border: 0;
+        transition: opacity 100ms ease-in;
+    }
+    strong {
+        color: LightBlue;
+    }
+    .datetime {
+        font-family: monospace;
+    }
+    .place-name {
+        color: LightGreen;
+    }
+  </style>
+  <script type="text/javascript">
+  
+    window.onload = function() {
+
+        function getDateCetegory(d) {
+          var y = parseInt(d.slice(3, 4))
+          var m = parseInt(d.slice(5, 7))
+          return (y == 0 && m < 12)?0:Math.floor(y*m/3)+1;
+
+        }
+
+        function getStyle(i, d) {
+          return new ol.style.Style({
+            image: new ol.style.Circle({
+              // radius: 3 + i * 2,
+              radius: 20 + i * 2,
+              // radius: 9 + i * 2,
+              // fill: new ol.style.Fill({color: [0, 0, 0, .1 + .2*d]}),
+              fill: new ol.style.Fill({color: [0, 0, 0, .3 + .15*d]}),
+              stroke: new ol.style.Stroke({
+                // color: [Math.min(i*102, 255),Math.min((5 - i)*102, 255),0, .1 + .2*d], width: 7 + i * 2
+                // color: [Math.min(i*102, 255),Math.min((5 - i)*102, 255),0, .3 + .15*d], width: 7 + i * 2
+                color: [Math.min(i*102, 255),Math.min((5 - i)*102, 255),0, .3 + .15*d], width: 1 + i * 2
+              })
+            })
+          })
+        }
+
+
+      function filternulla(x) {
+        return x == 0?1:x;
+      }
+
+
+      const Status = {
+        ALL: Symbol("all"),
+        Category0: Symbol("category0"),
+        Category1: Symbol("category1"),
+        Category2: Symbol("category2"),
+        Category3: Symbol("category3")
+      };
+      let status = Status.ALL;
+
+      // console.log(status)
+    
+        // ========== CREATE VECTORTILES LAYER with the TWITTER-POINTS from the GEOSERVER DOCKER CONTAINER (must be running)
+
+        var geoserver_docker_base_url = 'http://docker.ilab.sztaki.hu:49158/geoserver/gwc/service/tms/1.0.0/';
+        // var geoserver_layer_name = 'twitter-trekking:twitter_points';
+        // var geoserver_layer_name = 'twitter-trekking:GeoObs2';
+        // var geoserver_layer_name_all = 'twitter-trekking:europeGeoObs';
+        var geoserver_layer_name_all = 'twitter-trekking:europe_all';
+        var geoserver_layer_name0 = 'twitter-trekking:europe_0';
+        var geoserver_layer_name1 = 'twitter-trekking:europe_1';
+        var geoserver_layer_name2 = 'twitter-trekking:europe_2';
+        var geoserver_layer_name3 = 'twitter-trekking:europe_3';
+        var geoserver_layer_name_all_heat = 'twitter-trekking%3Aeurope_all';
+        var geoserver_layer_name0_heat = 'twitter-trekking%3Aeurope_0';
+        var geoserver_layer_name1_heat = 'twitter-trekking%3Aeurope_1';
+        var geoserver_layer_name2_heat = 'twitter-trekking%3Aeurope_2';
+        var geoserver_layer_name3_heat = 'twitter-trekking%3Aeurope_3';
+
+
+        var projection_epsg_no = '900913'; //'900913' // '3857'; //'4326';
+
+
+        var style_selected = new ol.style.Style({
+          image: new ol.style.Circle({
+            radius: 11,
+            fill: new ol.style.Fill({color: 'yellow'}),
+            stroke: new ol.style.Stroke({
+              color: [128,0,128], width: 3
+            })
+          })
+        });
+
+        var map_data_layer = new ol.layer.VectorTile({
+            style: function (feature) {
+                        return getStyle(feature.get("logdistance"), feature.get("datecategory"));
+                  },
+            // style: new ol.style.Style({
+            //           image: new ol.style.Circle({
+            //             radius: 28,
+            //             fill: new ol.style.Fill({
+            //               // color: 'rgba(125, 105, 26, 1)'
+            //               color: 'rgba(90, 17, 158, 1)'
+            //             }),
+            //             stroke: new ol.style.Stroke({
+            //               // color: '#5a119e',
+            //               color: 'rgba(125, 105, 26, 1)',
+            //               width: 4
+            //             }),
+            //           })
+            //         }),
+            // minZoom: 8,
+            minZoom: 9,
+            // minZoom: 5,
+            source: new ol.source.VectorTile({
+              tilePixelRatio: 1, // oversampling when > 1
+              tileGrid: ol.tilegrid.createXYZ({maxZoom: 19}),
+              // format: new ol.format.GeoJSON(),
+              format: new ol.format.GeoJSON({dataProjection: 'EPSG:900913'}),
+              // format: new ol.format.GeoJSON({featureProjection: 'EPSG:900913'}),
+              // format: new ol.format.GeoJSON({dataProjection: 'EPSG:900913', featureProjection: 'EPSG:900913'}),
+              url: geoserver_docker_base_url +
+                geoserver_layer_name_all + '@EPSG%3A' + projection_epsg_no + '@geojson/{z}/{x}/{-y}.geojson'
+              //   geoserver_layer_name_all + '@EPSG%3A' + projection_epsg_no + '@geojson/{z}/{x}/{-y}.geojson'
+               // url: 'http://docker.ilab.sztaki.hu:49158/geoserver/gwc/service/tms/1.0.0/twitter-trekking:europe_all@EPSG%3A900913@geojson/{z}/{x}/{-y}.geojson' 
+               // url: 'http://docker.ilab.sztaki.hu:49158/geoserver/gwc/service/tms/1.0.0/twitter-trekking:europe_all@EPSG%3A900913@geojson/{z}/{x}/{-y}.geojson' 
+              //format: new ol.format.GeoJSON(),
+              //url: geoserver_docker_base_url +
+              //  geoserver_layer_name_all + '@EPSG%3A' + projection_epsg_no + '@geojson/{z}/{x}/{-y}.geojson'
+            })
+          });
+
+        var map_data_layer0 = new ol.layer.VectorTile({
+            style: function (feature) {
+                        // TODO: 
+                        return getStyle(feature.get("logdistance"), feature.get("datecategory"));
+                        // return getStyle(Math.floor(Math.log2(filternulla(Math.round((parseFloat(feature.get("distance"))))))/3), getDateCetegory(feature.get('dt')));
+                  },
+            // minZoom: 8,
+            minZoom: 9,
+            // minZoom: 5,
+            source: new ol.source.VectorTile({
+              tilePixelRatio: 1, // oversampling when > 1
+              tileGrid: ol.tilegrid.createXYZ({maxZoom: 19}),
+              // format: new ol.format.MVT(),
+              format: new ol.format.GeoJSON({dataProjection: 'EPSG:900913'}),
+              url: geoserver_docker_base_url +
+                // geoserver_layer_name0 + '@EPSG%3A' + projection_epsg_no + '@pbf/{z}/{x}/{-y}.pbf'
+                geoserver_layer_name0 + '@EPSG%3A' + projection_epsg_no + '@geojson/{z}/{x}/{-y}.geojson'
+            })
+          });
+
+        var map_data_layer1 = new ol.layer.VectorTile({
+            style: function (feature) {
+                        return getStyle(feature.get("logdistance"), feature.get("datecategory"));
+                  },
+            // minZoom: 8,
+            minZoom: 9,
+            // minZoom: 5,
+            source: new ol.source.VectorTile({
+              tilePixelRatio: 1, // oversampling when > 1
+              tileGrid: ol.tilegrid.createXYZ({maxZoom: 19}),
+              // format: new ol.format.MVT(),
+              format: new ol.format.GeoJSON({dataProjection: 'EPSG:900913'}),
+              url: geoserver_docker_base_url +
+                // geoserver_layer_name1 + '@EPSG%3A' + projection_epsg_no + '@pbf/{z}/{x}/{-y}.pbf'
+                geoserver_layer_name1 + '@EPSG%3A' + projection_epsg_no + '@geojson/{z}/{x}/{-y}.geojson'
+            })
+          });
+
+        var map_data_layer2 = new ol.layer.VectorTile({
+            style: function (feature) {
+                        return getStyle(feature.get("logdistance"), feature.get("datecategory"));
+                  },
+            // minZoom: 8,
+            minZoom: 9,
+            // minZoom: 5,
+            source: new ol.source.VectorTile({
+              tilePixelRatio: 1, // oversampling when > 1
+              tileGrid: ol.tilegrid.createXYZ({maxZoom: 19}),
+              // format: new ol.format.MVT(),
+              format: new ol.format.GeoJSON({dataProjection: 'EPSG:900913'}),
+              url: geoserver_docker_base_url +
+                // geoserver_layer_name2 + '@EPSG%3A' + projection_epsg_no + '@pbf/{z}/{x}/{-y}.pbf'
+                geoserver_layer_name2 + '@EPSG%3A' + projection_epsg_no + '@geojson/{z}/{x}/{-y}.geojson'
+            })
+          });
+
+
+        var map_data_layer3 = new ol.layer.VectorTile({
+            style: function (feature) {
+                        return getStyle(feature.get("logdistance"), feature.get("datecategory"));
+                  },
+            // minZoom: 8,
+            minZoom: 9,
+            // minZoom: 5,
+            source: new ol.source.VectorTile({
+              tilePixelRatio: 1, // oversampling when > 1
+              tileGrid: ol.tilegrid.createXYZ({maxZoom: 19}),
+              // format: new ol.format.MVT(),
+              format: new ol.format.GeoJSON({dataProjection: 'EPSG:900913'}),
+              url: geoserver_docker_base_url +
+                // geoserver_layer_name3 + '@EPSG%3A' + projection_epsg_no + '@pbf/{z}/{x}/{-y}.pbf'
+                geoserver_layer_name3 + '@EPSG%3A' + projection_epsg_no + '@geojson/{z}/{x}/{-y}.geojson'
+
+            })
+          });
+
+
+        // ========== CREATE MAP with BASE LAYER and VECTORTILES LAYER:
+
+        var map = new ol.Map({
+          target: 'map',
+          view: new ol.View({
+            projection: 'EPSG:900913',
+            //center: ol.proj.transform([18.9085, 47.7889], 'EPSG:4326', 'EPSG:3857'),
+            center: ol.proj.transform([19.9496, 49.2992], 'EPSG:4326', 'EPSG:900913'), // [19.9496, 49.2992], //ol.proj.transform([19.9496, 49.2992], 'EPSG:4326', 'EPSG:3857'),
+            zoom: 5
+          }),
+          layers: [
+            new ol.layer.Tile({
+              source: new ol.source.OSM(),
+            }),
+            new ol.layer.Tile({
+               source: new ol.source.XYZ({
+                      url: 'http://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png'
+                  }),
+               opacity: 0.5
+              },
+            ),
+            // map_data_layer
+          ]
+        });
+
+        console.log(ol.proj.transform([19.9496, 49.2992], 'EPSG:4326', 'EPSG:900913'));
+
+
+        // ========== ADD HEATMAP LAYER:
+
+        var heatmapSource = new ol.source.Vector({
+            // format: new ol.format.GeoJSON({dataProjection: 'EPSG:900913', featureProjection: 'EPSG:900913'}),
+            format: new ol.format.GeoJSON(),
+            url: 'http://docker.ilab.sztaki.hu:49158/geoserver/twitter-trekking/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=' + geoserver_layer_name_all_heat + '&outputFormat=application%2Fjson'
+        });
+        var heatmapSource0 = new ol.source.Vector({
+            format: new ol.format.GeoJSON(),
+            url: 'http://docker.ilab.sztaki.hu:49158/geoserver/twitter-trekking/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=' + geoserver_layer_name0 + '&outputFormat=application%2Fjson'
+        });
+        var heatmapSource1 = new ol.source.Vector({
+            format: new ol.format.GeoJSON(),
+            url: 'http://docker.ilab.sztaki.hu:49158/geoserver/twitter-trekking/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=' + geoserver_layer_name1 + '&outputFormat=application%2Fjson'
+        });
+        var heatmapSource2 = new ol.source.Vector({
+            format: new ol.format.GeoJSON(),
+            url: 'http://docker.ilab.sztaki.hu:49158/geoserver/twitter-trekking/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=' + geoserver_layer_name2 + '&outputFormat=application%2Fjson'
+        });
+        var heatmapSource3 = new ol.source.Vector({
+            format: new ol.format.GeoJSON(),
+            url: 'http://docker.ilab.sztaki.hu:49158/geoserver/twitter-trekking/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=' + geoserver_layer_name3 + '&outputFormat=application%2Fjson'
+        });
+        var heat = new ol.layer.Heatmap({
+          title:'HeatMap1',
+          // maxZoom: 17,
+          maxZoom: 9,
+          preload: 3,
+          source: heatmapSource,
+          blur: 20,
+          radius: 10,
+        });
+        var heat0 = new ol.layer.Heatmap({
+          title:'HeatMap1',
+          // maxZoom: 10,
+          maxZoom: 9,
+          preload: 3,
+          source: heatmapSource0,
+          blur: 20,
+          radius: 10,
+        });
+        var heat1 = new ol.layer.Heatmap({
+          title:'HeatMap1',
+          maxZoom: 9,
+          preload: 3,
+          source: heatmapSource1,
+          blur: 20,
+          radius: 10,
+        });
+        var heat2 = new ol.layer.Heatmap({
+          title:'HeatMap2',
+          maxZoom: 9,
+          preload: 3,
+          source: heatmapSource2,
+          blur: 20,
+          radius: 10,
+        });
+        var heat3 = new ol.layer.Heatmap({
+          title:'HeatMap3',
+          maxZoom: 9,
+          preload: 3,
+          source: heatmapSource3,
+          blur: 20,
+          radius: 10,
+        });
+
+        
+        map.addLayer(heat);
+        map.addLayer(heat0);
+        map.addLayer(heat1);
+        map.addLayer(heat2);
+        map.addLayer(heat3);
+        map.addLayer(map_data_layer);
+        map.addLayer(map_data_layer0);
+        map.addLayer(map_data_layer1);
+        map.addLayer(map_data_layer2);
+        map.addLayer(map_data_layer3);
+
+
+        heat0.setVisible(false);
+        heat1.setVisible(false);
+        heat2.setVisible(false);
+        heat3.setVisible(false);
+
+        map_data_layer0.setVisible(false);
+        map_data_layer1.setVisible(false);
+        map_data_layer2.setVisible(false);
+        map_data_layer3.setVisible(false);
+
+
+        
+
+        // ========== HOVER & SELECTION:
+
+        function getActiveLayer() {
+           // console.log(status)
+           switch (status) {
+              case Status.ALL:
+                return map_data_layer;
+              break;
+              case Status.Category0:
+                return map_data_layer0;
+              break;
+              case Status.Category1:
+                return map_data_layer1;
+              break;
+              case Status.Category2:
+                return map_data_layer2;
+              break;
+              case Status.Category3:
+                return map_data_layer3;
+              break;
+              default:
+                console.log('stauts not defined')
+            }
+        };
+
+        var selection = {};
+
+        var map_selection_layer = new ol.layer.VectorTile({
+          map: map,
+          renderMode: 'vector',
+          source: map_data_layer.getSource(),
+          style: function (feature) {
+            if (feature.getId() in selection) {
+              return style_selected;
+            }
+          },
+        });
+
+
+        map.on(['pointermove'], function (event) {
+          var layer = getActiveLayer();
+          if (map.getView().getZoom() >= layer.getMinZoom()) {
+            layer.getFeatures(event.pixel).then(function (features) {
+              if (!features.length) {
+                selection = {};
+                map_selection_layer.setSource(layer.getSource());
+                map_selection_layer.changed();
+                return;
+              }
+              var feature = features[0];
+              if (!feature) {
+                return;
+              }
+              var fid = feature.getId();
+
+              selection = {};
+              // add selected feature to lookup
+              selection[fid] = feature;
+
+              map_selection_layer.setSource(layer.getSource());
+              map_selection_layer.changed();
+            });
+        }
+        });
+
+        // // ========== INFO PANEL with TWITTER POINT DATA:
+        
+        blankInfoContent = 'Nagyítson bele a térképbe és kattintson egy pontra a Twitter adatok megjelenítéséhez.';
+
+        map.on(['click'], function (event) {
+          var layer = getActiveLayer();
+          if (map.getView().getZoom() >= layer.getMinZoom()) {
+            layer.getFeatures(event.pixel).then(function (features) {
+            if (features.length == 0) {
+              info.innerText = blankInfoContent;
+              info.style.opacity = .5;
+              return;
+            }
+            var properties = features[0].getProperties();
+            
+            info.innerHTML = 
+              '<strong>Date:</strong> <span class="datetime">' + properties.dt + '</span><br>' +
+              '<strong>User name:</strong> ' + properties.screen_name+ '<br>' +
+              '<strong>User from:</strong> ' + properties.region + ', ' + properties.country + '<br>' +
+              '<strong>User distance:</strong> ' + Math.round(properties.distance) + '<br>' +
+              '<strong>Text:</strong>' + properties.text + '<br>';
+            
+
+            info.style.opacity = 1; 
+          })
+        }});
+
+        var test = document.getElementById('test');
+
+        var ball = document.getElementById('layer-link-all');
+        var b0 = document.getElementById('layer-link-0');
+        var b1 = document.getElementById('layer-link-1');
+        var b2 = document.getElementById('layer-link-2');
+        var b3 = document.getElementById('layer-link-3');
+
+        function inactivateLayers() {
+            ball.classList.remove('active');
+            b0.classList.remove('active');
+            b1.classList.remove('active');
+            b2.classList.remove('active');
+            b3.classList.remove('active');
+        }
+
+        ball.addEventListener("click", function() {
+          inactivateLayers();
+          ball.classList.add('active');
+          status = Status.ALL;
+          heat.setVisible(true);
+          heat0.setVisible(false);
+          heat1.setVisible(false);
+          heat2.setVisible(false);
+          heat3.setVisible(false);
+          map_data_layer.setVisible(true);
+          map_data_layer0.setVisible(false);
+          map_data_layer1.setVisible(false);
+          map_data_layer2.setVisible(false);
+          map_data_layer3.setVisible(false);
+        });
+
+        b0.addEventListener("click", function() {
+          inactivateLayers();
+          b0.classList.add('active');
+          status = Status.Category0;
+          heat.setVisible(false);
+          heat0.setVisible(true);
+          heat1.setVisible(false);
+          heat2.setVisible(false);
+          heat3.setVisible(false);
+          map_data_layer.setVisible(false);
+          map_data_layer0.setVisible(true);
+          map_data_layer1.setVisible(false);
+          map_data_layer2.setVisible(false);
+          map_data_layer3.setVisible(false);
+        });
+
+        b1.addEventListener("click", function() {
+          inactivateLayers();
+          b1.classList.add('active');
+          status = Status.Category1;
+          heat.setVisible(false);
+          heat0.setVisible(false);
+          heat1.setVisible(true);
+          heat2.setVisible(false);
+          heat3.setVisible(false);
+          map_data_layer.setVisible(false);
+          map_data_layer0.setVisible(false);
+          map_data_layer1.setVisible(true);
+          map_data_layer2.setVisible(false);
+          map_data_layer3.setVisible(false);
+        });
+
+        b2.addEventListener("click", function() {
+          inactivateLayers();
+          b2.classList.add('active');
+          status = Status.Category2;
+          heat.setVisible(false);
+          heat0.setVisible(false);
+          heat1.setVisible(false);
+          heat2.setVisible(true);
+          heat3.setVisible(false);
+          map_data_layer.setVisible(false);
+          map_data_layer0.setVisible(false);
+          map_data_layer1.setVisible(false);
+          map_data_layer2.setVisible(true);
+          map_data_layer3.setVisible(false);
+        });
+
+        b3.addEventListener("click", function() {
+          inactivateLayers();
+          b3.classList.add('active');
+          status = Status.Category3;
+          heat.setVisible(false);
+          heat0.setVisible(false);
+          heat1.setVisible(false);
+          heat2.setVisible(false);
+          heat3.setVisible(true);
+          map_data_layer.setVisible(false);
+          map_data_layer0.setVisible(false);
+          map_data_layer1.setVisible(false);
+          map_data_layer2.setVisible(false);
+          map_data_layer3.setVisible(true);
+        });
+        
+        var info = document.getElementById('info');
+        info.innerText = blankInfoContent;
+    }
+  </script>
+</head>
+<body>
+
+    <div class="container-fluid">
+      <div class="row footer0" style="height:60px;"></div>
+      <div class="row header0">
+          <h1>
+            <!-- <img src="./hikerpicto.svg" class="hikerpicto"> Közösségimédia-alapú látogatómonitoring  -->
+            <img src="https://info.ilab.sztaki.hu/~lukacsg/hikerpicto.svg" class="hikerpicto"> Közösségimédia-alapú látogatómonitoring 
+            <span style="float:right">
+                <img src="https://github.com/lukacsg/openlostcat/blob/master/openlostcat_logo.png?raw=true" height="70"> 
+                <img src="https://poltextlab.com/wp-content/uploads/2021/02/milab_logo_en.png" height="70">
+                <img src="https://www.i40platform.hu/sites/default/files/i40platform/2021-02/sztaki_logo_2019_uj_feher_svg_0.svg" height="70">
+            </span>
+          </h1>
+      </div>
+      <div class="row footer0" style="height:30px;"></div>
+      <div class="row content">
+        <div class="col-sm-3 sidenav">
+          <hr>
+          <h4>Helyszín megközelíthetőségi típus rétegek </h4>
+          <ul class="nav nav-pills nav-stacked">
+            <li id="layer-link-all" class="active"><a href="#">Bármely típusú helyszín</a></li>
+            <li id="layer-link-0"><a href="#">Turistaúton vagy közlekedéssel megközelíthető helyek</a></li>
+            <li id="layer-link-1"><a href="#">Közlekedéssel megközelíthető helyek</a></li>
+            <li id="layer-link-2"><a href="#">Kijelölt turistaúton megközelíthető helyek</a></li>
+            <li id="layer-link-3"><a href="#">Kijelölt turistaút nélküli terep</a></li>
+          </ul>
+          <hr>
+          <h4>Utazási távolságok (szín és méret)</h4>
+          <ul class="nav nav-pills nav-stacked">
+            <li><a><span class="dot" style="background-color:#00ff00;"></span> 0 - 10 km</a></li>
+            <li><a><span class="dot" style="background-color:#66ff00;"></span> 10 - 60 km</a></li>
+            <li><a><span class="dot" style="background-color:#ccff00;"></span> 60 - 500 km</a></li>
+            <li><a><span class="dot" style="background-color:#ffcc00;"></span> 500 - 4000 km</a></li>
+            <li><a><span class="dot" style="background-color:#ff6600;"></span> 4000 - 20000 km</a></li>
+          </ul>
+          <hr>
+          <h4>Látogatás ideje (átlátszóság)</h4>
+          <ul class="nav nav-pills nav-stacked">
+            <li><a><span class="dot" style="background-color:#b3b3b3;"></span> 2020.aug-nov.</a></li>
+            <li><a><span class="dot" style="background-color:#8d8d8d;"></span> 2020.dec-2021.febr.</a></li>
+            <li><a><span class="dot" style="background-color:#666666;"></span> 2021.márc-máj.</a></li>
+            <li><a><span class="dot" style="background-color:#404040;"></span> 2021.jún-aug.</a></li>
+            <li><a><span class="dot" style="background-color:#1a1a1a;"></span> 2021.szept-nov.</a></li>
+          </ul>
+        </div>
+
+        <div class="col-sm-9">
+          <div id="map" class="row map">
+          <p id="info">Initializing...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="container-fluid footer0">
+    Hivatkozások:
+    <ul>
+    <li>
+      Cikk: <a href="https://eprints.sztaki.hu/10396/" target="_blank">Béres, Ferenc and Lukács, Gábor and Molnár, András József and Szeiler, P (2022) An Exploratory Survey of Recreational Activities Using Twitter Data with Logic-Based Location Categorization. KIEL COMPUTER SCIENCE SERIES, 2022 (3). pp. 51-71. ISSN 2193-6781 10.21941/kcss/2022/3</a>
+    </li>
+    <li>
+      Helyszínkategorizáló eszköz (saját fejlesztés): <a href="https://github.com/lukacsg/openlostcat" target="_blank">OpenLostCat - A Location Categorizer Based on OpenStreetMap</a>
+    <li>Térképi adatok: © <a href="https://www.openstreetmap.org">OpenStreetMap</a> licensz: <a href="https://www.openstreetmap.org/copyright">ODbL</a>. Turistautak réteg: <a href="https://hiking.waymarkedtrails.org">WaymarkedTrails by lonvia</a>. Alaptérkép: <a href="https://opentopomap.org/">OpenTopoMap</a>(<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-by-SA</a>). Domborzat: <a href="help/acknowledgements">SRTM/ASTER</a>.
+    </li>
+    </ul>
+    </footer>
+</body>
+</html>
+"""
+
+# show map
+# st_folium(m, width=725)
+# use the folium generated html instead of above to keep the script too
+html(html0, width=1720, height=1000, scrolling=True)
